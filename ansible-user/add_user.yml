@@ -1,0 +1,10 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+
+  - name: Add user to remote hosts
+    user: name=ansible-admin groups=sudo shell=/bin/bash
+
+  - name: Add SSH keys to remote hosts
+    authorized_key: user=ansible-admin key="{{ lookup('file', "/etc/ansible/common/files/id_rsa.pub") }}"
