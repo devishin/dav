@@ -1,0 +1,2 @@
+zabbix_version: 5.2
+zabbix_repo_url: https://repo.zabbix.com/zabbix/{{ zabbix_version }}/ubuntu/pool/main/z/zabbix-release/zabbix-release_{{ zabbix_version }}-1%2Bubuntu20.04_all.deb
