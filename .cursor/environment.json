@@ -1,0 +1,4 @@
+{
+  "name": "dav",
+  "install": "bash .cursor/install.sh"
+}
