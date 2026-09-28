@@ -1,7 +1,8 @@
 #include <Arduino.h>
-#include <DHTesp.h>
+#include <esp_timer.h>
 
 #include "config.h"
+#include "sensor.h"
 
 #if __has_include("secrets.h")
 #include "secrets.h"
@@ -17,43 +18,6 @@
 
 namespace {
 
-DHTesp dht;
-
-struct SensorSnapshot {
-  bool valid = false;
-  float temperatureC = NAN;
-  float humidityPct = NAN;
-  uint8_t consecutiveFailures = 0;
-};
-
-SensorSnapshot readDhtOnce(SensorSnapshot prev) {
-  SensorSnapshot out = prev;
-  TempAndHumidity th = dht.getTempAndHumidity();
-
-  if (dht.getStatus() == 0 && !isnan(th.temperature) && !isnan(th.humidity)) {
-    out.valid = true;
-    out.temperatureC = th.temperature;
-    out.humidityPct = th.humidity;
-    out.consecutiveFailures = 0;
-  } else {
-    out.valid = false;
-    if (out.consecutiveFailures < 255) {
-      out.consecutiveFailures++;
-    }
-  }
-  return out;
-}
-
-void logSensor(const SensorSnapshot &s) {
-  if (s.valid) {
-    Serial.printf("[DHT] T=%.1f C  RH=%.1f %%  fails=%u\n", s.temperatureC,
-                  s.humidityPct, s.consecutiveFailures);
-  } else {
-    Serial.printf("[DHT] read failed (consecutive=%u, limit=%u)\n",
-                  s.consecutiveFailures, DHT_FAILURE_LIMIT);
-  }
-}
-
 #ifdef PHASE_HW_TEST
 
 void runHwTestLoop() {
@@ -63,56 +27,75 @@ void runHwTestLoop() {
   const uint32_t now = millis();
   if (now - lastReadMs >= DHT_READ_INTERVAL_MS) {
     lastReadMs = now;
-    sensor = readDhtOnce(sensor);
-    logSensor(sensor);
+    sensor = sensorReadOnce(sensor);
+    sensorLogReading(sensor);
   }
 }
 
 #else
-
 WifiManager wifi;
 ZabbixSender zabbix;
 
-char bufTemp[16];
-char bufHum[16];
-char bufRssi[8];
-char bufDhtStatus[4];
-char bufUptime[16];
+uint32_t deviceUptimeSeconds() {
+  return static_cast<uint32_t>(esp_timer_get_time() / 1000000ULL);
+}
+
+void logHardwareInfo() {
+  Serial.println(F("[HW] ESP32-S3"));
+  Serial.printf("[HW] Flash: %u MB\n",
+                static_cast<unsigned>(ESP.getFlashChipSize() / (1024U * 1024U)));
+  if (ESP.getPsramSize() > 0) {
+    Serial.printf("[HW] PSRAM: %u MB\n",
+                  static_cast<unsigned>(ESP.getPsramSize() / (1024U * 1024U)));
+  } else {
+    Serial.println(F("[HW] PSRAM: not detected"));
+  }
+  Serial.printf("[DHT] GPIO: %u\n", static_cast<unsigned>(DHT_PIN));
+}
 
 void sendZabbixBatch(const SensorSnapshot &sensor) {
   if (!wifi.isConnected()) {
-    Serial.println(F("[ZBX] skip send — WiFi down"));
+    Serial.println(F("[ZABBIX] skip — WiFi down"));
     return;
   }
+
+  ZabbixMetric metrics[6];
+  size_t n = 0;
+
+  char bufTemp[16];
+  char bufHum[16];
+  char bufRssi[12];
+  char bufUptime[16];
+  char bufSensorOk[4];
+  char bufFirmware[16];
+
+  const bool ok = sensorIsOk(sensor);
+  snprintf(bufSensorOk, sizeof(bufSensorOk), "%d", ok ? 1 : 0);
+  metrics[n++] = {ZBX_KEY_SENSOR_OK, bufSensorOk};
 
   if (sensor.valid) {
     snprintf(bufTemp, sizeof(bufTemp), "%.1f", sensor.temperatureC);
     snprintf(bufHum, sizeof(bufHum), "%.1f", sensor.humidityPct);
-  } else {
-    snprintf(bufTemp, sizeof(bufTemp), "0");
-    snprintf(bufHum, sizeof(bufHum), "0");
+    metrics[n++] = {ZBX_KEY_TEMPERATURE, bufTemp};
+    metrics[n++] = {ZBX_KEY_HUMIDITY, bufHum};
   }
 
-  snprintf(bufRssi, sizeof(bufRssi), "%d", wifi.rssi());
+  if (wifi.hasRssi()) {
+    snprintf(bufRssi, sizeof(bufRssi), "%d", wifi.rssi());
+    metrics[n++] = {ZBX_KEY_RSSI, bufRssi};
+  }
 
-  const int dhtStatus =
-      (sensor.consecutiveFailures >= DHT_FAILURE_LIMIT) ? ZBX_DHT_STATUS_FAILED
-                                                        : ZBX_DHT_STATUS_OK;
-  snprintf(bufDhtStatus, sizeof(bufDhtStatus), "%d", dhtStatus);
-  snprintf(bufUptime, sizeof(bufUptime), "%lu", millis() / 1000UL);
+  snprintf(bufUptime, sizeof(bufUptime), "%lu",
+           static_cast<unsigned long>(deviceUptimeSeconds()));
+  metrics[n++] = {ZBX_KEY_UPTIME, bufUptime};
 
-  const ZabbixMetric metrics[] = {
-      {ZBX_KEY_TEMPERATURE, bufTemp},
-      {ZBX_KEY_HUMIDITY, bufHum},
-      {ZBX_KEY_WIFI_RSSI, bufRssi},
-      {ZBX_KEY_DHT_STATUS, bufDhtStatus},
-      {ZBX_KEY_UPTIME, bufUptime},
-  };
+  snprintf(bufFirmware, sizeof(bufFirmware), "%s", FIRMWARE_VERSION);
+  metrics[n++] = {ZBX_KEY_FIRMWARE, bufFirmware};
 
-  const bool ok = zabbix.sendBatch(ZABBIX_HOST, ZABBIX_SERVER, ZABBIX_PORT,
-                                   metrics, sizeof(metrics) / sizeof(metrics[0]));
-  Serial.printf("[ZBX] batch %s -> %s:%u\n", ok ? "OK" : "FAIL", ZABBIX_SERVER,
-                static_cast<unsigned>(ZABBIX_PORT));
+  Serial.printf("[ZABBIX] Sending %u metrics to %s:%u\n", static_cast<unsigned>(n),
+                ZABBIX_SERVER, static_cast<unsigned>(ZABBIX_PORT));
+
+  zabbix.sendBatch(DEVICE_NAME, ZABBIX_SERVER, ZABBIX_PORT, metrics, n);
 }
 
 void runFullAppLoop() {
@@ -126,16 +109,15 @@ void runFullAppLoop() {
 
   if (now - lastReadMs >= DHT_READ_INTERVAL_MS) {
     lastReadMs = now;
-    sensor = readDhtOnce(sensor);
-    logSensor(sensor);
+    sensor = sensorReadOnce(sensor);
+    sensorLogReading(sensor);
   }
 
-  if (now - lastSendMs >= ZABBIX_SEND_INTERVAL_MS) {
+  if (now - lastSendMs >= TELEMETRY_INTERVAL_MS) {
     lastSendMs = now;
     sendZabbixBatch(sensor);
   }
 }
-
 #endif
 
 }  // namespace
@@ -146,21 +128,19 @@ void setup() {
   Serial.println();
 
 #ifdef PHASE_HW_TEST
-  Serial.println(F("=== ESP32 Thermometer — PHASE HW TEST (DHT GPIO4) ==="));
+  Serial.println(F("[BOOT] ESP32 Thermometer hardware test"));
 #else
-  Serial.println(F("=== ESP32 Thermometer — full app (WiFi + Zabbix ZBXD) ==="));
+  Serial.printf("[BOOT] ESP32 Thermometer %s\n", FIRMWARE_VERSION);
+  logHardwareInfo();
 #endif
 
-  dht.setup(DHT_PIN, static_cast<DHTesp::DHT_MODEL_t>(DHT_TYPE));
+  sensorBegin();
 
-#ifdef PHASE_HW_TEST
-  Serial.printf("DHT on GPIO%u every %lu ms (serial only)\n", DHT_PIN,
-                static_cast<unsigned long>(DHT_READ_INTERVAL_MS));
-#else
-  Serial.printf("DHT every %lu s; Zabbix batch every %lu s\n",
+#ifndef PHASE_HW_TEST
+  Serial.printf("[DHT] read every %lu s; Zabbix every %lu s\n",
                 static_cast<unsigned long>(DHT_READ_INTERVAL_MS / 1000),
-                static_cast<unsigned long>(ZABBIX_SEND_INTERVAL_MS / 1000));
-  wifi.begin(WIFI_SSID, WIFI_PASS);
+                static_cast<unsigned long>(TELEMETRY_INTERVAL_MS / 1000));
+  wifi.begin(WIFI_SSID, WIFI_PASSWORD);
 #endif
 }
 

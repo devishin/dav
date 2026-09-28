@@ -1,3 +1,3 @@
 # dav
 
-- **ESP32 thermometer:** [`esp32-thermometer/README.md`](esp32-thermometer/README.md) — PlatformIO firmware + Zabbix template in [`zabbix/`](zabbix/).
+Wi-Fi ESP32-S3 thermometer (DHT22 → Zabbix 5.0): see [`esp32-thermometer/README.md`](esp32-thermometer/README.md).

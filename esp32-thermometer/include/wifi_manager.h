@@ -8,7 +8,8 @@ class WifiManager {
   void loop();
 
   bool isConnected() const { return connected_; }
-  int rssi() const { return connected_ ? WiFi.RSSI() : 0; }
+  bool hasRssi() const;
+  int rssi() const;
 
  private:
   void startConnectAttempt();
@@ -17,6 +18,7 @@ class WifiManager {
   const char *password_ = nullptr;
   bool connected_ = false;
   bool connecting_ = false;
+  bool loggedConnected_ = false;
   uint32_t lastReconnectMs_ = 0;
   uint32_t connectStartedMs_ = 0;
 };
