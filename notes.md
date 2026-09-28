@@ -1,2 +1,2 @@
-- [x] [Build ESP32 thermometer firmware](bc-da3bcd83-75b5-5d10-b018-b56a2766de10) — `esp32-thermometer/` в репо; **BUILD PASS** (`release` + `hw-test`); спецификация §7–27 после доработки (`3a872ec`)
-- [ ] **Железо и Zabbix live** — COM/upload/DHT/Wi‑Fi/ZBXD: **NOT VERIFIED** (нужен `cursor worker start` на ноутбуке или локальный Serial log)
+- [x] [Build ESP32 thermometer firmware](bc-da3bcd83-75b5-5d10-b018-b56a2766de10) — `esp32-thermometer/` в репо; **BUILD PASS**; спецификация после `3a872ec`
+- [ ] **Железо и Zabbix live** — пользователь выбрал вариант Б (USB COM), но **private workers выключены**, worker не в сети → upload/DHT: **NOT VERIFIED**; ждём `cursor worker start` или Serial log (вариант А)
