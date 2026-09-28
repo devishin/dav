@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>5.0</version>
+    <date>2026-09-28T00:00:00Z</date>
+    <groups>
+        <group>
+            <name>Templates/IoT</name>
+        </group>
+    </groups>
+    <templates>
+        <template>
+            <template>Template ESP32 Thermometer</template>
+            <name>Template ESP32 Thermometer</name>
+            <description>Wi-Fi ESP32-S3 + DHT22 telemetry via Zabbix trapper (ZBXD sender). Import on Zabbix 5.0+.</description>
+            <groups>
+                <group>
+                    <name>Templates/IoT</name>
+                </group>
+            </groups>
+            <applications>
+                <application>
+                    <name>Environment</name>
+                </application>
+                <application>
+                    <name>Connectivity</name>
+                </application>
+                <application>
+                    <name>Health</name>
+                </application>
+            </applications>
+            <items>
+                <item>
+                    <name>Temperature</name>
+                    <type>TRAP</type>
+                    <key>esp32.temperature</key>
+                    <delay>0</delay>
+                    <history>7d</history>
+                    <trends>365d</trends>
+                    <status>ENABLED</status>
+                    <value_type>FLOAT</value_type>
+                    <units>°C</units>
+                    <applications>
+                        <application>
+                            <name>Environment</name>
+                        </application>
+                    </applications>
+                </item>
+                <item>
+                    <name>Humidity</name>
+                    <type>TRAP</type>
+                    <key>esp32.humidity</key>
+                    <delay>0</delay>
+                    <history>7d</history>
+                    <trends>365d</trends>
+                    <status>ENABLED</status>
+                    <value_type>FLOAT</value_type>
+                    <units>%</units>
+                    <applications>
+                        <application>
+                            <name>Environment</name>
+                        </application>
+                    </applications>
+                </item>
+                <item>
+                    <name>WiFi RSSI</name>
+                    <type>TRAP</type>
+                    <key>esp32.wifi.rssi</key>
+                    <delay>0</delay>
+                    <history>7d</history>
+                    <trends>90d</trends>
+                    <status>ENABLED</status>
+                    <value_type>FLOAT</value_type>
+                    <units>dBm</units>
+                    <applications>
+                        <application>
+                            <name>Connectivity</name>
+                        </application>
+                    </applications>
+                </item>
+                <item>
+                    <name>DHT status</name>
+                    <type>TRAP</type>
+                    <key>esp32.dht.status</key>
+                    <delay>0</delay>
+                    <history>7d</history>
+                    <trends>0</trends>
+                    <status>ENABLED</status>
+                    <value_type>UNSIGNED</value_type>
+                    <valuemap>
+                        <name>ESP32 DHT status</name>
+                    </valuemap>
+                    <applications>
+                        <application>
+                            <name>Health</name>
+                        </application>
+                    </applications>
+                </item>
+                <item>
+                    <name>Device uptime</name>
+                    <type>TRAP</type>
+                    <key>esp32.uptime</key>
+                    <delay>0</delay>
+                    <history>7d</history>
+                    <trends>90d</trends>
+                    <status>ENABLED</status>
+                    <value_type>UNSIGNED</value_type>
+                    <units>uptime</units>
+                    <applications>
+                        <application>
+                            <name>Health</name>
+                        </application>
+                    </applications>
+                </item>
+            </items>
+            <macros>
+                <macro>
+                    <macro>{$ESP32_HOST}</macro>
+                    <value>ESP32-Thermometer</value>
+                    <description>Hostname linked to this template (must match firmware ZABBIX_HOST)</description>
+                </macro>
+                <macro>
+                    <macro>{$TEMP_HIGH_C}</macro>
+                    <value>35</value>
+                    <description>High temperature trigger threshold (°C)</description>
+                </macro>
+                <macro>
+                    <macro>{$TEMP_LOW_C}</macro>
+                    <value>5</value>
+                    <description>Low temperature trigger threshold (°C)</description>
+                </macro>
+            </macros>
+            <triggers>
+                <trigger>
+                    <expression>{Template ESP32 Thermometer:esp32.dht.status.last()}=1</expression>
+                    <name>DHT sensor failure on {HOST.NAME}</name>
+                    <priority>HIGH</priority>
+                </trigger>
+                <trigger>
+                    <expression>{Template ESP32 Thermometer:esp32.temperature.last()}&gt;{$TEMP_HIGH_C}</expression>
+                    <name>High temperature on {HOST.NAME}</name>
+                    <priority>WARNING</priority>
+                </trigger>
+                <trigger>
+                    <expression>{Template ESP32 Thermometer:esp32.temperature.last()}&lt;{$TEMP_LOW_C}</expression>
+                    <name>Low temperature on {HOST.NAME}</name>
+                    <priority>WARNING</priority>
+                </trigger>
+                <trigger>
+                    <expression>{Template ESP32 Thermometer:esp32.temperature.nodata(180)}=1</expression>
+                    <name>No temperature data from {HOST.NAME} (3 min)</name>
+                    <priority>AVERAGE</priority>
+                </trigger>
+            </triggers>
+            <graphs>
+                <graph>
+                    <name>ESP32 temperature and humidity</name>
+                    <width>900</width>
+                    <height>200</height>
+                    <graph_items>
+                        <graph_item>
+                            <sortorder>0</sortorder>
+                            <item>
+                                <host>Template ESP32 Thermometer</host>
+                                <key>esp32.temperature</key>
+                            </item>
+                            <drawtype>GRADIENT_LINE</drawtype>
+                        </graph_item>
+                        <graph_item>
+                            <sortorder>1</sortorder>
+                            <item>
+                                <host>Template ESP32 Thermometer</host>
+                                <key>esp32.humidity</key>
+                            </item>
+                            <drawtype>GRADIENT_LINE</drawtype>
+                        </graph_item>
+                    </graph_items>
+                </graph>
+                <graph>
+                    <name>ESP32 WiFi RSSI</name>
+                    <width>900</width>
+                    <height>200</height>
+                    <graph_items>
+                        <graph_item>
+                            <sortorder>0</sortorder>
+                            <item>
+                                <host>Template ESP32 Thermometer</host>
+                                <key>esp32.wifi.rssi</key>
+                            </item>
+                            <drawtype>GRADIENT_LINE</drawtype>
+                        </graph_item>
+                    </graph_items>
+                </graph>
+            </graphs>
+        </template>
+    </templates>
+    <value_maps>
+        <value_map>
+            <name>ESP32 DHT status</name>
+            <mappings>
+                <mapping>
+                    <value>0</value>
+                    <newvalue>OK</newvalue>
+                </mapping>
+                <mapping>
+                    <value>1</value>
+                    <newvalue>FAILED</newvalue>
+                </mapping>
+            </mappings>
+        </value_map>
+    </value_maps>
+</zabbix_export>
